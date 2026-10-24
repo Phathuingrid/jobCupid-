@@ -1,0 +1,52 @@
+:root{--ink:#2B2350;--muted:#5B5480;--bg:#F4F1FF;--violet:#6C4DF6;--violet-d:#5A3BE0;--yellow:#FFD25E;--mint:#BFF0DC;--sky:#C9E4FF;--peach:#FFD3C2;--butter:#FFE58F;--line:#D9D2FF}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Nunito',system-ui,sans-serif}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--violet);outline-offset:2px}
+.app{max-width:430px;margin:0 auto;min-height:100vh;position:relative;padding-bottom:104px}
+.pad{padding:24px 20px;display:flex;flex-direction:column;gap:16px}
+h1{margin:0;font-size:26px;font-weight:900;line-height:1.1}
+h2{margin:0;font-size:18px;font-weight:900}
+h3{margin:0;font-size:16px;font-weight:800}
+.m{font-size:14px;font-weight:600;color:var(--muted);margin:0}
+.brand{margin:0 0 2px;font-size:16px;font-weight:900;color:var(--violet-d)}
+.brand span{color:#FF6B8B}
+.row{display:flex;align-items:center;gap:12px}
+.p{display:inline-flex;align-items:center;font-size:13px;font-weight:800;border-radius:99px;padding:7px 12px;background:#fff;border:0;min-height:34px}
+.chip{border:2px solid transparent;min-height:44px;padding:0 16px}
+.chip.on{background:var(--ink);color:#fff}
+.search{background:#fff;border-radius:99px;height:54px;display:flex;align-items:center;padding:0 22px}
+.search input{border:0;outline:0;width:100%;font-weight:700;font-size:15px;background:none}
+.chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+.chips .p{flex:none}
+.card{background:#fff;border-radius:24px;padding:14px;display:flex;align-items:center;gap:14px;width:100%;text-align:left;border:0}
+button.card{min-height:44px}
+.dot{width:48px;height:48px;border-radius:18px;flex:none;display:flex;align-items:center;justify-content:center;font-weight:900}
+.hero{background:var(--violet);color:#fff;border-radius:28px;padding:20px;position:relative;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.hero h2{font-size:21px;max-width:230px}
+.hero .mascot{position:absolute;right:14px;top:34px}
+.btn{background:var(--violet);color:#fff;border:0;border-radius:99px;min-height:56px;padding:0 24px;font-weight:900;font-size:17px}
+.btn.light{background:#fff;color:var(--violet-d);min-height:48px}
+.detail-top{background:var(--mint);border-radius:0 0 40px 40px;padding:24px 20px 28px;display:flex;flex-direction:column;gap:12px;align-items:flex-start}
+.circle{width:48px;height:48px;border-radius:99px;border:0;background:#fff;font-size:20px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.stat{background:#fff;border-radius:24px;padding:14px}
+.col{flex-direction:column;align-items:stretch;gap:10px}
+.bar{display:flex;gap:6px}
+.bar i{flex:1;height:10px;border-radius:99px;background:var(--line)}
+.bar i.on{background:var(--violet)}
+.chk{display:flex;align-items:center;gap:12px;min-height:44px;font-weight:700;cursor:pointer}
+.chk input{width:22px;height:22px;accent-color:var(--violet)}
+.missing{border:2px dashed var(--violet);background:#fff}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{border:2px solid var(--line);background:#fff;border-radius:99px;min-height:44px;padding:0 14px;font-weight:800;font-size:13px}
+.seg button.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.nav{position:fixed;left:50%;transform:translateX(-50%);bottom:20px;width:min(390px,calc(100% - 40px));height:64px;background:var(--ink);border-radius:99px;display:flex;justify-content:space-around;align-items:center}
+.nav button{min-width:80px;min-height:44px;border:0;border-radius:99px;background:none;color:#E3DDFF;font-weight:800;font-size:13px}
+.nav button.on{background:var(--yellow);color:var(--ink)}
+.bubble{background:#fff;border-radius:22px 22px 22px 6px;padding:14px 16px;flex:1}
+.note{font-size:13px;font-weight:600;color:var(--muted);margin:0}
+.fixed-cta{position:fixed;left:50%;transform:translateX(-50%);bottom:20px;width:min(390px,calc(100% - 40px))}
+.empty{background:#fff;border-radius:24px;padding:24px;text-align:center;display:flex;flex-direction:column;gap:8px;align-items:center}
+@media (prefers-reduced-motion:no-preference){button{transition:transform .12s}button:active{transform:scale(.97)}}
