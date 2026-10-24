@@ -1,6 +1,6 @@
 # JobCupid
 
-A mobile-friendly opportunity organiser for young South Africans. Built for the Youth employment and work readiness challenge.
+A mobile-friendly opportunity organiser for young South Africans. Built for the FNB hackathon challenge of helping young people with limited work experience find opportunities that suit their qualifications and skills.
 
 **The journey:** browse demo listings, open one, tick off the documents you've prepared, pick your skills, see how ready you are, save it, and track it from Saved to Applied to Interview.
 
