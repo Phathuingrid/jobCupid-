@@ -50,3 +50,10 @@ button.card{min-height:44px}
 .fixed-cta{position:fixed;left:50%;transform:translateX(-50%);bottom:20px;width:min(390px,calc(100% - 40px))}
 .empty{background:#fff;border-radius:24px;padding:24px;text-align:center;display:flex;flex-direction:column;gap:8px;align-items:center}
 @media (prefers-reduced-motion:no-preference){button{transition:transform .12s}button:active{transform:scale(.97)}}
+.field{display:flex;flex-direction:column;gap:6px;font-weight:800;font-size:14px}
+.field input,.field select,.field textarea{background:#fff;border:2px solid var(--line);border-radius:16px;padding:12px 14px;font-weight:600;min-height:48px;width:100%}
+.field textarea{min-height:96px;resize:vertical}
+.err{color:#B3261E;font-weight:800;font-size:14px;margin:0}
+a.btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;text-align:center}
+.nav button{min-width:72px}
+.linkbtn{background:#E8E3FF;border:0;border-radius:99px;min-height:44px;padding:0 16px;font-weight:800;font-size:13px}

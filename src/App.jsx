@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react'
-import { opportunities, allSkills } from './data/opportunities'
+import { useEffect, useRef, useState } from 'react'
+import { demoListings } from './data/opportunities'
+import { allSkills, skillsIn, DEFAULT_DOCS } from './lib/skills'
+import { fetchLive } from './lib/live'
 
 const STATUSES = ['Saved', 'Applied', 'Interview', 'Closed']
 const TYPES = ['All', 'Internship', 'Learnership', 'Graduate programme', 'Entry-level']
@@ -47,11 +49,17 @@ function readiness(o, checks, skills) {
 }
 
 function closing(iso) {
+  if (!iso) return { text: 'Not listed', closed: false }
   const days = Math.ceil((new Date(iso + 'T23:59:59') - Date.now()) / 86400000)
   if (days < 0) return { text: 'Closed', closed: true }
   if (days === 0) return { text: 'Closes today', closed: false }
   return { text: `${days} day${days === 1 ? '' : 's'} left`, closed: false }
 }
+
+const kind = (o) => (o.demo ? 'Demo listing' : o.live ? 'Live · Adzuna' : 'Added by you')
+const safeLink = (u) => (u && /^https?:\/\//i.test(u) ? u : null)
+const where = (o) => [o.employer, o.place].filter(Boolean).join(' · ')
+const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
 
 function Bar({ got, total }) {
   return (
@@ -69,14 +77,14 @@ function OppCard({ o, r, status, onOpen }) {
       <span className="dot" style={{ background: TINT[o.type] }} aria-hidden="true">{o.type[0]}</span>
       <span style={{ flex: 1 }}>
         <h3>{o.title}</h3>
-        <p className="m">{o.employer} · {o.place}</p>
+        <p className="m">{where(o)}</p>
         <p className="m">{r.got} of {r.total} ready{status ? ` · ${status}` : ''}</p>
       </span>
     </button>
   )
 }
 
-function Home({ list, q, setQ, type, setType, pick, skills, getR, apps, open }) {
+function Home({ list, q, setQ, type, setType, pick, skills, getR, apps, open, usingDemo, liveState }) {
   return (
     <div className="pad">
       <div className="row">
@@ -113,7 +121,10 @@ function Home({ list, q, setQ, type, setType, pick, skills, getR, apps, open }) 
         </div>
       )}
       {list.map((o) => <OppCard key={o.id} o={o} r={getR(o)} status={apps[o.id]} onOpen={open} />)}
-      <p className="note">All listings are fictional demo data, not real vacancies.</p>
+      {liveState === 'loading' && <p className="note">Loading live listings…</p>}
+      {usingDemo && liveState === 'error' && <p className="note">Live listings couldn't be loaded. Showing fictional demo listings instead.</p>}
+      {usingDemo && liveState === 'ok' && <p className="note">No live listings found. Showing fictional demo listings instead.</p>}
+      {!usingDemo && <p className="note">Jobs by Adzuna. Always check the details on the employer's official page before you apply.</p>}
     </div>
   )
 }
@@ -129,10 +140,10 @@ function Detail({ o, r, status, setStatus, remove, checks, toggleCheck, onBack, 
         </div>
         <div className="seg">
           <span className="p">{o.type}</span>
-          <span className="p" style={{ background: '#FFE58F' }}>Demo listing</span>
+          <span className="p" style={{ background: '#FFE58F' }}>{kind(o)}</span>
         </div>
         <h1>{o.title}</h1>
-        <p className="m" style={{ color: 'var(--ink)' }}>{o.employer} · {o.place}</p>
+        <p className="m" style={{ color: 'var(--ink)' }}>{where(o)}</p>
       </div>
       <div className="pad">
         <div className="grid2">
@@ -140,6 +151,9 @@ function Detail({ o, r, status, setStatus, remove, checks, toggleCheck, onBack, 
           <div className="stat"><p className="m">You earn</p><h3>{o.pay}</h3></div>
         </div>
         <div className="stat"><p className="m">Who can apply</p><h3>{o.eligibility}</h3></div>
+        {o.description && <div className="stat"><p className="m">From the listing</p><p className="m" style={{ color: 'var(--ink)' }}>{o.description.slice(0, 320)}{o.description.length > 320 ? '…' : ''}</p></div>}
+        {o.live && <p className="note">Source: Adzuna · Checked {new Date(o.checked).toLocaleDateString('en-ZA')}</p>}
+        {safeLink(o.link) && <a className="btn" href={safeLink(o.link)} target="_blank" rel="noopener noreferrer">{o.live ? 'Apply on the official page' : 'Open the original page'}</a>}
 
         <div className="card col">
           <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -159,6 +173,7 @@ function Detail({ o, r, status, setStatus, remove, checks, toggleCheck, onBack, 
             {r.matched.map((s) => <span key={s} className="p" style={{ background: '#BFF0DC' }}>✓ {s}</span>)}
             {r.missing.map((s) => <span key={s} className="p missing">Add: {s}</span>)}
           </div>
+          {!o.skills.length && <p className="note">No specific skills were mentioned in this listing.</p>}
           {!hasSkills && <button className="p" style={{ background: '#E8E3FF', alignSelf: 'flex-start' }} onClick={goPath}>Pick your skills</button>}
           <p className="note">A simple count of what you've ticked and picked. It doesn't predict whether you'll be hired.</p>
         </div>
@@ -176,7 +191,7 @@ function Detail({ o, r, status, setStatus, remove, checks, toggleCheck, onBack, 
 
         <div className="row" style={{ alignItems: 'flex-end' }}>
           <Mascot size={52} />
-          <div className="bubble"><p className="m" style={{ color: 'var(--ink)' }}>This is a demo listing. For a real vacancy, we'd send you to the employer's official application page.</p></div>
+          <div className="bubble"><p className="m" style={{ color: 'var(--ink)' }}>{o.demo ? 'This is a demo listing. For a real vacancy, we would send you to the employer’s official application page.' : 'Check the closing date and requirements on the official page before you apply. We only help you organise what you find.'}</p></div>
         </div>
       </div>
       {!status && <div className="fixed-cta"><button className="btn" style={{ width: '100%' }} onClick={() => setStatus(o.id, 'Saved')}>Save to my list</button></div>}
@@ -184,29 +199,70 @@ function Detail({ o, r, status, setStatus, remove, checks, toggleCheck, onBack, 
   )
 }
 
-function Saved({ list, apps, getR, open, goHome }) {
-  if (!list.length)
-    return (
-      <div className="pad">
-        <h1>My list</h1>
-        <div className="empty">
-          <Mascot size={64} />
-          <h3>Nothing saved yet</h3>
-          <p className="m">Save an opportunity and track it from Saved to Applied to Interview.</p>
-          <button className="btn" onClick={goHome}>Browse opportunities</button>
-        </div>
+function Backup({ onExport, onImport, msg }) {
+  const ref = useRef(null)
+  return (
+    <div className="card col">
+      <h3>Back up your list</h3>
+      <p className="m">Your list lives in this browser only. Download it to keep a copy or move to another device.</p>
+      <div className="seg">
+        <button className="linkbtn" onClick={onExport}>Download my list</button>
+        <button className="linkbtn" onClick={() => ref.current.click()}>Load a saved list</button>
+        <input ref={ref} type="file" accept="application/json" hidden onChange={(e) => e.target.files[0] && onImport(e.target.files[0])} />
       </div>
-    )
+      {msg && <p className="note" role="status">{msg}</p>}
+    </div>
+  )
+}
+
+function Saved({ list, apps, getR, open, goAdd, onExport, onImport, msg }) {
   return (
     <div className="pad">
       <h1>My list</h1>
+      {!list.length && (
+        <div className="empty">
+          <Mascot size={64} />
+          <h3>Nothing saved yet</h3>
+          <p className="m">Save an opportunity, or add one you found online, and track it from Saved to Applied to Interview.</p>
+          <button className="btn" onClick={goAdd}>Add one by link</button>
+        </div>
+      )}
       {STATUSES.filter((s) => list.some((o) => apps[o.id] === s)).map((s) => (
         <section key={s} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <h2>{s}</h2>
           {list.filter((o) => apps[o.id] === s).map((o) => <OppCard key={o.id} o={o} r={getR(o)} onOpen={open} />)}
         </section>
       ))}
+      <Backup onExport={onExport} onImport={onImport} msg={msg} />
     </div>
+  )
+}
+
+function AddForm({ onAdd }) {
+  const blank = { title: '', employer: '', link: '', closes: '', type: 'Entry-level', notes: '' }
+  const [f, setF] = useState(blank)
+  const [err, setErr] = useState('')
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
+  const submit = (e) => {
+    e.preventDefault()
+    if (!f.title.trim()) return setErr('Add a title so you can find it later.')
+    if (f.link.trim() && !/^https?:\/\//i.test(f.link.trim())) return setErr('Start the link with http:// or https://')
+    setErr('')
+    onAdd(f)
+    setF(blank)
+  }
+  return (
+    <form className="pad" onSubmit={submit} noValidate>
+      <div className="row"><Mascot size={56} /><div><p className="m">Found one online?</p><h1>Add it to your list</h1></div></div>
+      <label className="field">Title<input value={f.title} onChange={set('title')} placeholder="e.g. Finance Graduate Programme" /></label>
+      <label className="field">Employer<input value={f.employer} onChange={set('employer')} placeholder="Company name" /></label>
+      <label className="field">Link to the listing<input value={f.link} onChange={set('link')} inputMode="url" placeholder="https://" /></label>
+      <label className="field">Closing date<input type="date" value={f.closes} onChange={set('closes')} /></label>
+      <label className="field">Type<select value={f.type} onChange={set('type')}>{TYPES.slice(1).map((t) => <option key={t}>{t}</option>)}</select></label>
+      <label className="field">Paste the description (optional)<textarea value={f.notes} onChange={set('notes')} placeholder="We'll spot skills mentioned in it" /></label>
+      {err && <p className="err" role="alert">{err}</p>}
+      <button className="btn" type="submit">Save to my list</button>
+    </form>
   )
 }
 
@@ -240,9 +296,25 @@ export default function App() {
   const [apps, setApps] = useStored('jc_apps', {})
   const [checks, setChecks] = useStored('jc_checks', {})
   const [skills, setSkills] = useStored('jc_skills', [])
+  const [snap, setSnap] = useStored('jc_snap', {})
+  const [custom, setCustom] = useStored('jc_custom', [])
+  const [live, setLive] = useState([])
+  const [liveState, setLiveState] = useState('loading')
+  const [msg, setMsg] = useState('')
 
+  useEffect(() => {
+    fetchLive().then((l) => { setLive(l); setLiveState('ok') }).catch(() => setLiveState('error'))
+  }, [])
+
+  const usingDemo = live.length === 0
+  const feed = [...custom, ...(usingDemo ? demoListings : live)]
+  const find = (id) => feed.find((o) => String(o.id) === String(id)) || snap[id]
   const getR = (o) => readiness(o, checks, skills)
-  const setStatus = (id, s) => setApps({ ...apps, [id]: s })
+  const setStatus = (id, s, o) => {
+    setApps({ ...apps, [id]: s })
+    const l = o || find(id)
+    if (l) setSnap({ ...snap, [id]: l })
+  }
   const remove = (id) => {
     const next = { ...apps }
     delete next[id]
@@ -251,33 +323,72 @@ export default function App() {
   const toggleCheck = (id, req) => setChecks({ ...checks, [id]: { ...checks[id], [req]: !checks[id]?.[req] } })
   const toggleSkill = (s) => setSkills(skills.includes(s) ? skills.filter((x) => x !== s) : [...skills, s])
   const open = (id) => { setOpenId(id); window.scrollTo(0, 0) }
-  const go = (t) => { setOpenId(null); setTab(t); window.scrollTo(0, 0) }
+  const go = (t) => { setOpenId(null); setTab(t); setMsg(''); window.scrollTo(0, 0) }
+
+  const addCustom = (f) => {
+    const o = {
+      id: 'my-' + Date.now(), title: f.title.trim(), employer: f.employer.trim() || 'Employer not listed', place: '',
+      type: f.type, closes: f.closes || null, pay: 'See listing', eligibility: 'See the original listing',
+      skills: skillsIn(f.title + ' ' + f.notes), requirements: DEFAULT_DOCS, description: f.notes.trim(), link: f.link.trim() || null, custom: true,
+    }
+    setCustom([o, ...custom])
+    setStatus(o.id, 'Saved', o)
+    open(o.id)
+  }
+
+  const exportData = () => {
+    const blob = new Blob([JSON.stringify({ apps, snap, checks, skills, custom }, null, 2)], { type: 'application/json' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = 'jobcupid-my-list.json'
+    a.click()
+    URL.revokeObjectURL(a.href)
+    setMsg('Downloaded. Keep the file somewhere safe.')
+  }
+  const importData = async (file) => {
+    try {
+      const d = JSON.parse(await file.text())
+      if (!isRecord(d) || !isRecord(d.apps) ||
+        (d.snap !== undefined && !isRecord(d.snap)) ||
+        (d.checks !== undefined && !isRecord(d.checks)) ||
+        (d.skills !== undefined && !Array.isArray(d.skills)) ||
+        (d.custom !== undefined && !Array.isArray(d.custom))) {
+        throw new Error('Invalid JobCupid backup')
+      }
+      setApps(d.apps || {}); setSnap(d.snap || {}); setChecks(d.checks || {}); setSkills(d.skills || []); setCustom(d.custom || [])
+      setMsg('Your list was loaded.')
+    } catch {
+      setMsg('That file could not be read. Choose a file you downloaded from JobCupid.')
+    }
+  }
 
   const term = q.trim().toLowerCase()
-  const list = opportunities.filter(
+  const list = feed.filter(
     (o) => (type === 'All' || o.type === type) &&
       (!term || [o.title, o.employer, o.type, o.place, ...o.skills].join(' ').toLowerCase().includes(term))
   )
-  const ratio = (o) => getR(o).matched.length / o.skills.length
-  const ranked = [...opportunities].sort((a, b) => ratio(b) - ratio(a))
-  const pick = skills.length ? ranked[0] : opportunities[0]
-  const saved = opportunities.filter((o) => apps[o.id])
-  const current = opportunities.find((o) => o.id === openId)
+  const ratio = (o) => (o.skills.length ? getR(o).matched.length / o.skills.length : 0)
+  const ranked = [...feed].sort((a, b) => ratio(b) - ratio(a))
+  const pick = skills.length ? ranked[0] : feed.find((o) => !o.custom)
+  const saved = Object.keys(apps).map(find).filter(Boolean)
+  const current = openId ? find(openId) : null
 
   return (
     <div className="app">
       {current ? (
         <Detail o={current} r={getR(current)} status={apps[current.id]} setStatus={setStatus} remove={remove} checks={checks} toggleCheck={toggleCheck} onBack={() => setOpenId(null)} goPath={() => go('path')} hasSkills={skills.length > 0} />
       ) : tab === 'home' ? (
-        <Home list={list} q={q} setQ={setQ} type={type} setType={setType} pick={pick} skills={skills} getR={getR} apps={apps} open={open} />
+        <Home list={list} q={q} setQ={setQ} type={type} setType={setType} pick={pick} skills={skills} getR={getR} apps={apps} open={open} usingDemo={usingDemo} liveState={liveState} />
+      ) : tab === 'add' ? (
+        <AddForm onAdd={addCustom} />
       ) : tab === 'saved' ? (
-        <Saved list={saved} apps={apps} getR={getR} open={open} goHome={() => go('home')} />
+        <Saved list={saved} apps={apps} getR={getR} open={open} goAdd={() => go('add')} onExport={exportData} onImport={importData} msg={msg} />
       ) : (
         <Path skills={skills} toggleSkill={toggleSkill} best={ranked.slice(0, 3)} getR={getR} apps={apps} open={open} />
       )}
       {(!current || apps[current.id]) && (
         <nav className="nav" aria-label="Main">
-          {[['home', 'Home'], ['saved', 'Saved'], ['path', 'My path']].map(([id, label]) => (
+          {[['home', 'Home'], ['add', 'Add'], ['saved', 'Saved'], ['path', 'My path']].map(([id, label]) => (
             <button key={id} className={!current && tab === id ? 'on' : ''} aria-current={!current && tab === id ? 'page' : undefined} onClick={() => go(id)}>{label}</button>
           ))}
         </nav>

@@ -14,4 +14,4 @@ export const opportunities = [
   o(8, 'Creative Content Programme', 'Internship', 'Demo Studio', 'Johannesburg', '2026-10-31', 'Monthly stipend', 'Portfolio of any creative work', ['Creativity', 'Social media', 'Teamwork'], ['CV', 'Portfolio link']),
 ]
 
-export const allSkills = [...new Set(opportunities.flatMap((x) => x.skills))].sort()
+export const demoListings = opportunities.map((o) => ({ ...o, demo: true }))
