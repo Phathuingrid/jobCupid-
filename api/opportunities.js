@@ -1,5 +1,5 @@
 // Vercel serverless function. Keeps your Adzuna keys on the server, never in the browser.
-// Set ADZUNA_APP_ID and ADZUNA_APP_KEY in your hosting dashboard (see .env.example).
+// Set ADZUNA_APP_ID and ADZUNA_APP_KEY in your hosting dashboard or ignored .env.local.
 export default async function handler(req, res) {
   const { ADZUNA_APP_ID, ADZUNA_APP_KEY } = process.env
   if (!ADZUNA_APP_ID || !ADZUNA_APP_KEY) return res.status(500).json({ error: 'Adzuna keys are not set' })

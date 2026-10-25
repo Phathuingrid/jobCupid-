@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { demoListings } from './data/opportunities'
 import { allSkills, skillsIn, DEFAULT_DOCS } from './lib/skills'
 import { fetchLive } from './lib/live'
+import Bridge from './Bridge'
+import Quests from './Quests'
+import Circle from './Circle'
 
 const STATUSES = ['Saved', 'Applied', 'Interview', 'Closed']
 const TYPES = ['All', 'Internship', 'Learnership', 'Graduate programme', 'Entry-level']
@@ -56,7 +58,7 @@ function closing(iso) {
   return { text: `${days} day${days === 1 ? '' : 's'} left`, closed: false }
 }
 
-const kind = (o) => (o.demo ? 'Demo listing' : o.live ? 'Live · Adzuna' : 'Added by you')
+const kind = (o) => (o.live ? 'Live · Adzuna' : 'Added by you')
 const safeLink = (u) => (u && /^https?:\/\//i.test(u) ? u : null)
 const where = (o) => [o.employer, o.place].filter(Boolean).join(' · ')
 const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -84,7 +86,7 @@ function OppCard({ o, r, status, onOpen }) {
   )
 }
 
-function Home({ list, q, setQ, type, setType, pick, skills, getR, apps, open, usingDemo, liveState }) {
+function Home({ list, q, setQ, type, setType, pick, skills, getR, apps, open, liveState, onRetry }) {
   return (
     <div className="pad">
       <div className="row">
@@ -111,25 +113,37 @@ function Home({ list, q, setQ, type, setType, pick, skills, getR, apps, open, us
           <div className="mascot"><Mascot size={76} /></div>
         </div>
       )}
-      <h2>{list.length ? 'Fresh today' : 'Nothing here yet'}</h2>
+      <h2>{list.length ? 'Fresh today' : liveState === 'loading' ? 'Loading opportunities' : liveState === 'error' ? 'Live listings unavailable' : 'No opportunities found'}</h2>
       {list.length === 0 && (
         <div className="empty">
           <Mascot size={64} />
-          <h3>No matches for that</h3>
-          <p className="m">Try a different word, or clear the filter to see everything.</p>
-          <button className="btn" onClick={() => { setQ(''); setType('All') }}>Clear search</button>
+          {liveState === 'error' ? (
+            <>
+              <h3>We couldn't load live opportunities</h3>
+              <p className="m">For local listings, configure ADZUNA_APP_ID and ADZUNA_APP_KEY in .env.local and run `npx vercel dev`. For deployment, add them to your hosting environment.</p>
+              <button className="btn" onClick={onRetry}>Try again</button>
+            </>
+          ) : liveState === 'loading' ? (
+            <>
+              <h3>Connecting to live listings…</h3>
+              <p className="m">Please wait while we fetch current opportunities.</p>
+            </>
+          ) : (
+            <>
+              <h3>No live opportunities match</h3>
+              <p className="m">Try a different search, or clear the filter to see all available listings.</p>
+              <button className="btn" onClick={() => { setQ(''); setType('All') }}>Clear search</button>
+            </>
+          )}
         </div>
       )}
       {list.map((o) => <OppCard key={o.id} o={o} r={getR(o)} status={apps[o.id]} onOpen={open} />)}
-      {liveState === 'loading' && <p className="note">Loading live listings…</p>}
-      {usingDemo && liveState === 'error' && <p className="note">Live listings couldn't be loaded. Showing fictional demo listings instead.</p>}
-      {usingDemo && liveState === 'ok' && <p className="note">No live listings found. Showing fictional demo listings instead.</p>}
-      {!usingDemo && <p className="note">Jobs by Adzuna. Always check the details on the employer's official page before you apply.</p>}
+      {liveState === 'ok' && <p className="note">Jobs by Adzuna. Always check the details on the employer's official page before you apply.</p>}
     </div>
   )
 }
 
-function Detail({ o, r, status, setStatus, remove, checks, toggleCheck, onBack, goPath, hasSkills }) {
+function Detail({ o, r, status, setStatus, remove, checks, toggleCheck, onBack, goPath, onBridge, hasSkills }) {
   const c = closing(o.closes)
   return (
     <div>
@@ -173,6 +187,8 @@ function Detail({ o, r, status, setStatus, remove, checks, toggleCheck, onBack, 
             {r.matched.map((s) => <span key={s} className="p" style={{ background: '#BFF0DC' }}>✓ {s}</span>)}
             {r.missing.map((s) => <span key={s} className="p missing">Add: {s}</span>)}
           </div>
+          {r.missing.length > 0 && <button className="btn" onClick={onBridge}>Build a bridge to these skills</button>}
+          {r.missing.length === 0 && o.skills.length > 0 && <p className="note">You are matched on all the skills mentioned in this listing.</p>}
           {!o.skills.length && <p className="note">No specific skills were mentioned in this listing.</p>}
           {!hasSkills && <button className="p" style={{ background: '#E8E3FF', alignSelf: 'flex-start' }} onClick={goPath}>Pick your skills</button>}
           <p className="note">A simple count of what you've ticked and picked. It doesn't predict whether you'll be hired.</p>
@@ -191,7 +207,7 @@ function Detail({ o, r, status, setStatus, remove, checks, toggleCheck, onBack, 
 
         <div className="row" style={{ alignItems: 'flex-end' }}>
           <Mascot size={52} />
-          <div className="bubble"><p className="m" style={{ color: 'var(--ink)' }}>{o.demo ? 'This is a demo listing. For a real vacancy, we would send you to the employer’s official application page.' : 'Check the closing date and requirements on the official page before you apply. We only help you organise what you find.'}</p></div>
+          <div className="bubble"><p className="m" style={{ color: 'var(--ink)' }}>Check the closing date and requirements on the official page before you apply. We only help you organise what you find.</p></div>
         </div>
       </div>
       {!status && <div className="fixed-cta"><button className="btn" style={{ width: '100%' }} onClick={() => setStatus(o.id, 'Saved')}>Save to my list</button></div>}
@@ -296,20 +312,34 @@ export default function App() {
   const [apps, setApps] = useStored('jc_apps', {})
   const [checks, setChecks] = useStored('jc_checks', {})
   const [skills, setSkills] = useStored('jc_skills', [])
+  const [proof, setProof] = useStored('jc_proof', {})
+  const [learned, setLearned] = useStored('jc_learned', {})
   const [snap, setSnap] = useStored('jc_snap', {})
   const [custom, setCustom] = useStored('jc_custom', [])
   const [live, setLive] = useState([])
   const [liveState, setLiveState] = useState('loading')
   const [msg, setMsg] = useState('')
+  const [bridgeId, setBridgeId] = useState(null)
+
+  const loadLive = async () => {
+    setLiveState('loading')
+    try {
+      setLive(await fetchLive())
+      setLiveState('ok')
+    } catch {
+      setLive([])
+      setLiveState('error')
+    }
+  }
 
   useEffect(() => {
-    fetchLive().then((l) => { setLive(l); setLiveState('ok') }).catch(() => setLiveState('error'))
+    loadLive()
   }, [])
 
-  const usingDemo = live.length === 0
-  const feed = [...custom, ...(usingDemo ? demoListings : live)]
+  const feed = [...custom, ...live]
   const find = (id) => feed.find((o) => String(o.id) === String(id)) || snap[id]
-  const getR = (o) => readiness(o, checks, skills)
+  const owned = [...new Set([...skills, ...Object.keys(proof)])]
+  const getR = (o) => readiness(o, checks, owned)
   const setStatus = (id, s, o) => {
     setApps({ ...apps, [id]: s })
     const l = o || find(id)
@@ -323,7 +353,13 @@ export default function App() {
   const toggleCheck = (id, req) => setChecks({ ...checks, [id]: { ...checks[id], [req]: !checks[id]?.[req] } })
   const toggleSkill = (s) => setSkills(skills.includes(s) ? skills.filter((x) => x !== s) : [...skills, s])
   const open = (id) => { setOpenId(id); window.scrollTo(0, 0) }
-  const go = (t) => { setOpenId(null); setTab(t); setMsg(''); window.scrollTo(0, 0) }
+  const go = (t) => { setOpenId(null); setBridgeId(null); setTab(t); setMsg(''); window.scrollTo(0, 0) }
+  const saveProof = (skill, evidence) => setProof({ ...proof, [skill]: evidence })
+  const removeProof = (skill) => {
+    const next = { ...proof }
+    delete next[skill]
+    setProof(next)
+  }
 
   const addCustom = (f) => {
     const o = {
@@ -337,7 +373,7 @@ export default function App() {
   }
 
   const exportData = () => {
-    const blob = new Blob([JSON.stringify({ apps, snap, checks, skills, custom }, null, 2)], { type: 'application/json' })
+    const blob = new Blob([JSON.stringify({ apps, snap, checks, skills, custom, proof, learned }, null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
     a.download = 'jobcupid-my-list.json'
@@ -352,10 +388,12 @@ export default function App() {
         (d.snap !== undefined && !isRecord(d.snap)) ||
         (d.checks !== undefined && !isRecord(d.checks)) ||
         (d.skills !== undefined && !Array.isArray(d.skills)) ||
-        (d.custom !== undefined && !Array.isArray(d.custom))) {
+        (d.custom !== undefined && !Array.isArray(d.custom)) ||
+        (d.proof !== undefined && !isRecord(d.proof)) ||
+        (d.learned !== undefined && !isRecord(d.learned))) {
         throw new Error('Invalid JobCupid backup')
       }
-      setApps(d.apps || {}); setSnap(d.snap || {}); setChecks(d.checks || {}); setSkills(d.skills || []); setCustom(d.custom || [])
+      setApps(d.apps || {}); setSnap(d.snap || {}); setChecks(d.checks || {}); setSkills(d.skills || []); setCustom(d.custom || []); setProof(d.proof || {}); setLearned(d.learned || {})
       setMsg('Your list was loaded.')
     } catch {
       setMsg('That file could not be read. Choose a file you downloaded from JobCupid.')
@@ -369,26 +407,33 @@ export default function App() {
   )
   const ratio = (o) => (o.skills.length ? getR(o).matched.length / o.skills.length : 0)
   const ranked = [...feed].sort((a, b) => ratio(b) - ratio(a))
-  const pick = skills.length ? ranked[0] : feed.find((o) => !o.custom)
+  const pick = owned.length ? ranked[0] : feed.find((o) => !o.custom)
   const saved = Object.keys(apps).map(find).filter(Boolean)
   const current = openId ? find(openId) : null
+  const bridgeO = bridgeId ? find(bridgeId) : null
 
   return (
     <div className="app">
-      {current ? (
-        <Detail o={current} r={getR(current)} status={apps[current.id]} setStatus={setStatus} remove={remove} checks={checks} toggleCheck={toggleCheck} onBack={() => setOpenId(null)} goPath={() => go('path')} hasSkills={skills.length > 0} />
+      {bridgeO ? (
+        <Bridge o={bridgeO} owned={owned} proof={proof} learned={learned} setLearned={setLearned} saveProof={saveProof} removeProof={removeProof} r={getR(bridgeO)} onBack={() => setBridgeId(null)} />
+      ) : current ? (
+        <Detail o={current} r={getR(current)} status={apps[current.id]} setStatus={setStatus} remove={remove} checks={checks} toggleCheck={toggleCheck} onBack={() => setOpenId(null)} goPath={() => go('path')} onBridge={() => { setBridgeId(current.id); window.scrollTo(0, 0) }} hasSkills={owned.length > 0} />
       ) : tab === 'home' ? (
-        <Home list={list} q={q} setQ={setQ} type={type} setType={setType} pick={pick} skills={skills} getR={getR} apps={apps} open={open} usingDemo={usingDemo} liveState={liveState} />
+        <Home list={list} q={q} setQ={setQ} type={type} setType={setType} pick={pick} skills={owned} getR={getR} apps={apps} open={open} liveState={liveState} onRetry={loadLive} />
+      ) : tab === 'quests' ? (
+        <Quests proof={proof} saveProof={saveProof} removeProof={removeProof} learned={learned} setLearned={setLearned} />
+      ) : tab === 'circle' ? (
+        <Circle />
       ) : tab === 'add' ? (
         <AddForm onAdd={addCustom} />
       ) : tab === 'saved' ? (
         <Saved list={saved} apps={apps} getR={getR} open={open} goAdd={() => go('add')} onExport={exportData} onImport={importData} msg={msg} />
       ) : (
-        <Path skills={skills} toggleSkill={toggleSkill} best={ranked.slice(0, 3)} getR={getR} apps={apps} open={open} />
+        <Path skills={owned} toggleSkill={toggleSkill} best={ranked.slice(0, 3)} getR={getR} apps={apps} open={open} />
       )}
-      {(!current || apps[current.id]) && (
+      {!bridgeO && (!current || apps[current.id]) && (
         <nav className="nav" aria-label="Main">
-          {[['home', 'Home'], ['add', 'Add'], ['saved', 'Saved'], ['path', 'My path']].map(([id, label]) => (
+          {[['home', 'Home'], ['quests', 'Quests'], ['circle', 'Circle'], ['add', 'Add'], ['saved', 'Saved'], ['path', 'Path']].map(([id, label]) => (
             <button key={id} className={!current && tab === id ? 'on' : ''} aria-current={!current && tab === id ? 'page' : undefined} onClick={() => go(id)}>{label}</button>
           ))}
         </nav>

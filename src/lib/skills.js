@@ -9,11 +9,25 @@ export const SKILLS = {
   Writing: ['copywriting', 'content writing', 'writing skills', 'report writing'],
   Creativity: ['creative', 'content creation'],
   'Customer care': ['customer service', 'customer care', 'client service', 'call cent'],
+  JavaScript: ['javascript', 'java script'],
+  HTML: ['html'],
+  CSS: ['css', 'cascading style sheets'],
+  React: ['react.js', 'reactjs'],
+  TypeScript: ['typescript', 'type script'],
+  GitHub: ['github', 'git hub'],
 }
 export const allSkills = Object.keys(SKILLS)
-export const skillsIn = (text = '') => {
-  const t = text.toLowerCase()
-  return allSkills.filter((s) => SKILLS[s].some((w) => t.includes(w)))
+const TECH_SKILLS = {
+  JavaScript: /\bjava\s?script\b/i,
+  HTML: /\bhtml\b/i,
+  CSS: /\bcss\b/i,
+  React: /\breact(?:\.js)?\b|\breactjs\b/i,
+  TypeScript: /\btype\s?script\b/i,
+  GitHub: /\bgithub\b/i,
 }
+export const skillsIn = (text = '') =>
+  allSkills.filter((skill) => TECH_SKILLS[skill]
+    ? TECH_SKILLS[skill].test(text)
+    : SKILLS[skill].some((word) => text.toLowerCase().includes(word)))
 // APIs rarely list required documents, so users get a standard checklist they can tick.
 export const DEFAULT_DOCS = ['CV', 'Certified ID copy', 'Matric certificate', 'Cover letter']

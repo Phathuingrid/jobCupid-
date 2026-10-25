@@ -57,3 +57,37 @@ button.card{min-height:44px}
 a.btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;text-align:center}
 .nav button{min-width:72px}
 .linkbtn{background:#E8E3FF;border:0;border-radius:99px;min-height:44px;padding:0 16px;font-weight:800;font-size:13px}
+.nav{justify-content:space-evenly}
+.nav button{min-width:0;flex:1;padding:0 4px;font-size:11px}
+.field input{font:inherit}
+.composer{display:flex;gap:8px}
+.composer input{min-width:0;flex:1;background:#fff;border:2px solid var(--line);border-radius:99px;padding:0 16px;font-weight:700}
+.composer .btn{min-height:48px;padding:0 18px;font-size:15px}
+.composer .btn:disabled{opacity:.65;cursor:wait}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.bridge-header{background:var(--sky)}
+.bridge-intro{color:var(--ink)}
+.bridge-card{gap:16px}
+.bridge-step{display:flex;gap:12px;align-items:flex-start}
+.bridge-number{width:36px;height:36px;border-radius:14px;flex:none;display:flex;align-items:center;justify-content:center;background:#E8E3FF;font-weight:900}
+.bridge-number.done{background:var(--mint)}
+.bridge-step-content{min-width:0;flex:1;display:flex;flex-direction:column;gap:8px}
+.bridge-link{align-self:flex-start;display:inline-flex;align-items:center;text-decoration:none;color:inherit}
+.evidence-form{display:flex;flex-direction:column;gap:10px}
+.proof-card{background:#E8FBF2;align-items:flex-start;flex-direction:column}
+.proof-card a{color:var(--violet-d);font-weight:800;word-break:break-all}
+.quest-mark,.circle-mark{width:52px;height:52px;flex:none;display:grid;place-items:center;border-radius:18px;background:var(--yellow);font-size:28px;font-weight:900}
+.circle-mark{background:var(--mint)}
+.quest-card{align-items:flex-start}
+.quest-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.quest-copy .m{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.circle-safety{background:#fff3d6;border-radius:20px;padding:14px;display:flex;flex-direction:column;gap:6px}
+.circle-account{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.circle-messages{min-height:180px;max-height:52vh;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding:4px 0}
+.circle-message{max-width:88%;align-self:flex-start;display:flex;flex-direction:column;gap:4px}
+.circle-message.mine{align-self:flex-end}
+.circle-message .bubble{flex:none;background:#fff;border-radius:22px 22px 22px 6px;padding:14px 16px;overflow-wrap:anywhere}
+.circle-message.mine .bubble{background:var(--violet);color:#fff;border-radius:22px 22px 6px 22px}
+.circle-message .bubble p{margin:0;font-weight:600}
+.report-button{align-self:flex-start}
+@media(max-width:360px){.nav button{font-size:10px;padding:0 2px}.nav{width:calc(100% - 16px)}}
