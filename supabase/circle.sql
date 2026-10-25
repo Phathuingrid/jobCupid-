@@ -1,10 +1,37 @@
 create table if not exists public.circle_messages (
   id uuid primary key default gen_random_uuid(),
-  room text not null check (room in ('tech', 'service', 'cv', 'new')),
+  room text not null,
   user_id uuid not null references auth.users (id) on delete cascade,
+  display_name text not null default 'Community member' check (char_length(btrim(display_name)) between 2 and 24),
   text text not null check (char_length(btrim(text)) between 1 and 300),
   created_at timestamptz not null default now()
 );
+
+alter table public.circle_messages
+  add column if not exists display_name text not null default 'Community member';
+
+alter table public.circle_messages
+  drop constraint if exists circle_messages_room_check;
+
+update public.circle_messages
+set room = case room
+  when 'service' then 'support'
+  when 'cv' then 'careers'
+  when 'new' then 'general'
+  else room
+end
+where room in ('service', 'cv', 'new');
+
+alter table public.circle_messages
+  add constraint circle_messages_room_check
+  check (room in ('general', 'tech', 'careers', 'opportunities', 'support'));
+
+alter table public.circle_messages
+  drop constraint if exists circle_messages_display_name_check;
+
+alter table public.circle_messages
+  add constraint circle_messages_display_name_check
+  check (char_length(btrim(display_name)) between 2 and 24);
 
 create index if not exists circle_messages_room_created_at_idx
   on public.circle_messages (room, created_at);

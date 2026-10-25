@@ -62,6 +62,67 @@ const kind = (o) => (o.sample ? 'Sample · Example only' : o.live ? 'Live · Adz
 const safeLink = (u) => (u && /^https?:\/\//i.test(u) ? u : null)
 const where = (o) => [o.employer, o.place].filter(Boolean).join(' · ')
 const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+}[character]))
+
+function makeListDocument(saved, apps, checks, backup) {
+  const opportunities = saved.length
+    ? saved.map((o) => {
+      const requirements = o.requirements.map((requirement) =>
+        `<li>${checks[o.id]?.[requirement] ? '✓' : '○'} ${escapeHtml(requirement)}</li>`
+      ).join('')
+      const skills = o.skills.length ? o.skills.map(escapeHtml).join(', ') : 'None listed'
+      const link = safeLink(o.link)
+      return `<article>
+        <h2>${escapeHtml(o.title)}</h2>
+        <p class="status">${escapeHtml(apps[o.id])}</p>
+        <p><strong>Employer:</strong> ${escapeHtml(o.employer || 'Not listed')}</p>
+        <p><strong>Location:</strong> ${escapeHtml(o.place || 'Not listed')}</p>
+        <p><strong>Type:</strong> ${escapeHtml(o.type || 'Not listed')}</p>
+        <p><strong>Closing date:</strong> ${escapeHtml(o.closes || 'Not listed')}</p>
+        <p><strong>Pay:</strong> ${escapeHtml(o.pay || 'Not listed')}</p>
+        <p><strong>Eligibility:</strong> ${escapeHtml(o.eligibility || 'Not listed')}</p>
+        <p><strong>Skills:</strong> ${skills}</p>
+        ${o.description ? `<p><strong>Notes:</strong> ${escapeHtml(o.description)}</p>` : ''}
+        ${requirements ? `<p><strong>Checklist:</strong></p><ul>${requirements}</ul>` : ''}
+        ${link ? `<p><strong>Listing:</strong> <a href="${escapeHtml(link)}">${escapeHtml(link)}</a></p>` : ''}
+      </article>`
+    }).join('')
+    : '<p>You have no saved opportunities yet.</p>'
+  const bytes = new TextEncoder().encode(JSON.stringify(backup))
+  let binary = ''
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte) })
+  const encodedBackup = btoa(binary)
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My JobCupid list</title>
+  <style>
+    body{font:16px/1.55 Arial,sans-serif;color:#2B2350;max-width:760px;margin:40px auto;padding:0 24px}
+    h1{font-size:30px;margin-bottom:4px}h2{font-size:21px;margin:0 0 8px}
+    .muted{color:#5B5480}.status{display:inline-block;background:#E8E3FF;border-radius:20px;padding:4px 12px;font-weight:bold}
+    article{border:1px solid #D9D2FF;border-radius:16px;padding:20px;margin:20px 0;break-inside:avoid}
+    p{margin:8px 0}ul{padding-left:24px}
+    @media print{body{margin:0 auto}.restore-note{display:none}}
+  </style>
+</head>
+<body>
+  <h1>My JobCupid list</h1>
+  <p class="muted">Saved opportunities · Prepared ${escapeHtml(new Date().toLocaleDateString('en-ZA'))}</p>
+  ${opportunities}
+  <p class="muted restore-note">To restore your saved list and progress, use “Load a saved document” in JobCupid and select this file.</p>
+</body>
+</html>
+<!-- JobCupid backup: ${encodedBackup} -->`
+}
 
 function Bar({ got, total }) {
   return (
@@ -207,11 +268,15 @@ function Backup({ onExport, onImport, msg }) {
   return (
     <div className="card col">
       <h3>Back up your list</h3>
-      <p className="m">Your list lives in this browser only. Download it to keep a copy or move to another device.</p>
+      <p className="m">Download a readable document or load one you saved earlier. Your list stays in this browser unless you move the file yourself.</p>
       <div className="seg">
-        <button className="linkbtn" onClick={onExport}>Download my list</button>
-        <button className="linkbtn" onClick={() => ref.current.click()}>Load a saved list</button>
-        <input ref={ref} type="file" accept="application/json" hidden onChange={(e) => e.target.files[0] && onImport(e.target.files[0])} />
+        <button className="linkbtn" onClick={onExport}>Download my document</button>
+        <button className="linkbtn" onClick={() => ref.current.click()}>Load a saved document</button>
+        <input ref={ref} type="file" accept=".html,.json,text/html,application/json" hidden onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file) onImport(file)
+          e.target.value = ''
+        }} />
       </div>
       {msg && <p className="note" role="status">{msg}</p>}
     </div>
@@ -343,17 +408,29 @@ export default function App() {
   }
 
   const exportData = () => {
-    const blob = new Blob([JSON.stringify({ apps, snap, checks, skills, custom, proof, learned }, null, 2)], { type: 'application/json' })
+    const backup = { apps, snap, checks, skills, custom, proof, learned }
+    const blob = new Blob([makeListDocument(saved, apps, checks, backup)], { type: 'text/html;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = 'jobcupid-my-list.json'
+    a.href = url
+    a.download = 'my-jobcupid-list.html'
     a.click()
-    URL.revokeObjectURL(a.href)
-    setMsg('Downloaded. Keep the file somewhere safe.')
+    a.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    setMsg('Your readable document was downloaded. Load it in JobCupid later to restore your list and progress.')
   }
   const importData = async (file) => {
     try {
-      const d = JSON.parse(await file.text())
+      const text = await file.text()
+      const embeddedBackup = text.match(/<!-- JobCupid backup: ([A-Za-z0-9+/=]+) -->/)
+      let d
+      if (embeddedBackup) {
+        const binary = atob(embeddedBackup[1])
+        const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
+        d = JSON.parse(new TextDecoder().decode(bytes))
+      } else {
+        d = JSON.parse(text)
+      }
       if (!isRecord(d) || !isRecord(d.apps) ||
         (d.snap !== undefined && !isRecord(d.snap)) ||
         (d.checks !== undefined && !isRecord(d.checks)) ||
@@ -364,7 +441,7 @@ export default function App() {
         throw new Error('Invalid JobCupid backup')
       }
       setApps(d.apps || {}); setSnap(d.snap || {}); setChecks(d.checks || {}); setSkills(d.skills || []); setCustom(d.custom || []); setProof(d.proof || {}); setLearned(d.learned || {})
-      setMsg('Your list was loaded.')
+      setMsg('Your saved list and progress were loaded.')
     } catch {
       setMsg('That file could not be read. Choose a file you downloaded from JobCupid.')
     }

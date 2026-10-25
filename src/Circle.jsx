@@ -2,18 +2,30 @@ import { useEffect, useState } from 'react'
 import { supabase, supabaseConfigured } from './lib/supabase'
 
 const ROOMS = [
-  ['tech', 'Software and tech'],
-  ['service', 'Customer service'],
-  ['cv', 'CV and interviews'],
-  ['new', 'New here'],
+  ['general', 'Community chat'],
+  ['tech', 'Tech and digital'],
+  ['careers', 'CVs and interviews'],
+  ['opportunities', 'Jobs and learnerships'],
+  ['support', 'Study and support'],
 ]
 const PERSONAL = /\b\d{13}\b|(?:\+27|0)[\s-]?\d{2}[\s-]?\d{3}[\s-]?\d{4}|\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b/i
+const NAME_PATTERN = /^[\p{L}\p{N} _.-]{2,24}$/u
+
+function storedName() {
+  try {
+    return localStorage.getItem('jc_circle_name') || ''
+  } catch {
+    return ''
+  }
+}
 
 export default function Circle() {
-  const [room, setRoom] = useState('tech')
+  const [room, setRoom] = useState('general')
   const [user, setUser] = useState(null)
-  const [email, setEmail] = useState('')
-  const [emailSent, setEmailSent] = useState(false)
+  const [authLoading, setAuthLoading] = useState(true)
+  const [displayName, setDisplayName] = useState(storedName)
+  const [nameInput, setNameInput] = useState(storedName)
+  const [editingName, setEditingName] = useState(!storedName())
   const [messages, setMessages] = useState([])
   const [reported, setReported] = useState({})
   const [text, setText] = useState('')
@@ -25,15 +37,36 @@ export default function Circle() {
   useEffect(() => {
     if (!supabase) return undefined
     let active = true
-    supabase.auth.getSession().then(({ data, error: sessionError }) => {
-      if (!active) return
-      if (sessionError) setError(`Could not restore your Circle session: ${sessionError.message}`)
-      setUser(data.session?.user || null)
-    })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user || null)
-      setEmailSent(false)
     })
+    const startAnonymousSession = async () => {
+      try {
+        const { data, error: sessionError } = await supabase.auth.getSession()
+        if (!active) return
+        if (sessionError) {
+          setError(`Could not restore your Circle session: ${sessionError.message}`)
+          setAuthLoading(false)
+          return
+        }
+        if (data.session?.user) {
+          setUser(data.session.user)
+          setAuthLoading(false)
+          return
+        }
+        const { data: anonymousData, error: authError } = await supabase.auth.signInAnonymously()
+        if (!active) return
+        if (authError) setError(`Could not join the chat: ${authError.message}. Enable Anonymous Sign-Ins in Supabase Authentication settings.`)
+        else setUser(anonymousData.user)
+        setAuthLoading(false)
+      } catch (authError) {
+        if (!active) return
+        const details = authError instanceof Error ? authError.message : 'Unexpected authentication error'
+        setError(`Could not join the chat: ${details}. Check your connection and Supabase Anonymous Sign-In settings.`)
+        setAuthLoading(false)
+      }
+    }
+    startAnonymousSession()
     return () => {
       active = false
       subscription.unsubscribe()
@@ -53,7 +86,7 @@ export default function Circle() {
     const loadMessages = async () => {
       const { data, error: queryError } = await supabase
         .from('circle_messages')
-        .select('id, room, user_id, text, created_at')
+        .select('id, room, user_id, display_name, text, created_at')
         .eq('room', room)
         .order('created_at', { ascending: true })
         .limit(100)
@@ -83,27 +116,44 @@ export default function Circle() {
     }
   }, [room, user])
 
-  const signIn = async (event) => {
+  const joinWithName = (event) => {
     event.preventDefault()
-    if (!supabase) return
-    setError('')
-    setNotice('')
-    const address = email.trim()
-    if (!address) {
-      setError('Enter your email address to receive a sign-in link.')
+    const name = nameInput.trim()
+    if (!NAME_PATTERN.test(name)) {
+      setError('Choose a chat name with 2–24 letters, numbers, spaces, dots, dashes or underscores.')
       return
     }
-    const { error: authError } = await supabase.auth.signInWithOtp({
-      email: address,
-      options: { emailRedirectTo: window.location.origin },
-    })
-    if (authError) setError(`Could not send the sign-in link: ${authError.message}`)
-    else setEmailSent(true)
+    try {
+      localStorage.setItem('jc_circle_name', name)
+    } catch {
+      setError('Your chat name could not be saved in this browser. Check your browser storage settings and try again.')
+      return
+    }
+    setDisplayName(name)
+    setEditingName(false)
+    setError('')
+    setNotice('')
+  }
+
+  const retryJoin = async () => {
+    if (!supabase) return
+    setAuthLoading(true)
+    setError('')
+    try {
+      const { data, error: authError } = await supabase.auth.signInAnonymously()
+      if (authError) setError(`Could not join the chat: ${authError.message}. Enable Anonymous Sign-Ins in Supabase Authentication settings.`)
+      else setUser(data.user)
+    } catch (authError) {
+      const details = authError instanceof Error ? authError.message : 'Unexpected authentication error'
+      setError(`Could not join the chat: ${details}. Check your connection and Supabase settings.`)
+    } finally {
+      setAuthLoading(false)
+    }
   }
 
   const send = async (event) => {
     event.preventDefault()
-    if (!supabase || !user) return
+    if (!supabase || !user || !displayName) return
     const message = text.trim().slice(0, 300)
     if (!message) return
     if (PERSONAL.test(message)) {
@@ -114,8 +164,8 @@ export default function Circle() {
     setError('')
     const { data, error: insertError } = await supabase
       .from('circle_messages')
-      .insert({ room, user_id: user.id, text: message })
-      .select('id, room, user_id, text, created_at')
+      .insert({ room, user_id: user.id, display_name: displayName, text: message })
+      .select('id, room, user_id, display_name, text, created_at')
       .single()
     setSending(false)
     if (insertError) {
@@ -142,38 +192,39 @@ export default function Circle() {
     setNotice('Thanks for reporting. The report was recorded for review.')
   }
 
-  const signOut = async () => {
-    if (!supabase) return
-    const { error: signOutError } = await supabase.auth.signOut()
-    if (signOutError) setError(`Could not sign out: ${signOutError.message}`)
-  }
-
   return (
     <div className="pad">
-      <div className="row"><div className="circle-mark" aria-hidden="true">♡</div><div><p className="brand">Cupid Circle</p><h1>Talk to people like you</h1></div></div>
+      <div className="row"><div className="circle-mark" aria-hidden="true">♡</div><div><p className="brand">Cupid Circle</p><h1>Community group chats</h1></div></div>
       <div className="circle-safety">
         <h3>Keep each other safe</h3>
-        <p className="m">Never share your ID number, phone, address, passwords, or bank details. Be kind, report unsafe messages, and verify opportunities on official pages. Messages are visible to signed-in Circle members.</p>
+        <p className="m">Chat without an email address. Messages are shared with everyone in each group. Never share your ID number, phone, address, passwords, or bank details. Be kind and report unsafe messages.</p>
       </div>
 
       {!supabaseConfigured ? (
         <div className="empty">
           <h2>Circle needs backend setup</h2>
-          <p className="m">Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.local, run the SQL setup in supabase/circle.sql, then restart the development server.</p>
+          <p className="m">Add VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY to .env.local, enable Anonymous Sign-Ins in Supabase Authentication settings, run the SQL setup in supabase/circle.sql, then restart the development server.</p>
         </div>
+      ) : authLoading ? (
+        <p className="note" role="status">Joining the community chat…</p>
       ) : !user ? (
-        <form className="card col" onSubmit={signIn}>
-          <h2>Sign in to join the Circle</h2>
-          <p className="m">We’ll email you a one-time sign-in link. Your email is used for sign-in and is not shown in chat.</p>
-          <label className="field">Email address<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
-          <button className="btn" type="submit">Email me a sign-in link</button>
-          {emailSent && <p className="note" role="status">Check your email for a sign-in link, then return here.</p>}
+        <div className="empty">
+          <h2>Could not join the chat</h2>
+          <p className="m">Check the Supabase settings and make sure Anonymous Sign-Ins are enabled.</p>
+          <button className="btn" onClick={retryJoin}>Try again</button>
+        </div>
+      ) : editingName || !displayName ? (
+        <form className="card col" onSubmit={joinWithName}>
+          <h2>Choose your chat name</h2>
+          <p className="m">No email or public profile is needed. Pick a nickname between 2 and 24 characters. It will appear beside your messages.</p>
+          <label className="field">Chat name<input value={nameInput} onChange={(event) => setNameInput(event.target.value)} maxLength={24} autoComplete="nickname" required /></label>
+          <button className="btn" type="submit">Join the groups</button>
         </form>
       ) : (
         <>
           <div className="circle-account">
-            <p className="note">Signed in as a Circle member</p>
-            <button className="linkbtn" onClick={signOut}>Sign out</button>
+            <p className="note">Chatting as <strong>{displayName}</strong></p>
+            <button className="linkbtn" onClick={() => { setNameInput(displayName); setEditingName(true) }}>Change name</button>
           </div>
           <div className="chips" role="group" aria-label="Circle chat rooms">
             {ROOMS.map(([id, name]) => <button key={id} className={`p chip ${room === id ? 'on' : ''}`} aria-pressed={room === id} onClick={() => { setRoom(id); setNotice('') }}>{name}</button>)}
@@ -185,7 +236,7 @@ export default function Circle() {
               const mine = message.user_id === user.id
               return (
                 <article key={message.id} className={`circle-message${mine ? ' mine' : ''}`}>
-                  <p className="note">{mine ? 'You' : `Member ${message.user_id.slice(0, 6)}`} · {new Date(message.created_at).toLocaleString()}</p>
+                  <p className="note">{mine ? 'You' : message.display_name || 'Community member'} · {new Date(message.created_at).toLocaleString()}</p>
                   <div className="bubble"><p>{message.text}</p></div>
                   {!mine && !reported[message.id] && <button className="linkbtn report-button" onClick={() => report(message.id)}>Report message</button>}
                   {!mine && reported[message.id] && <p className="note" role="status">Reported for review</p>}
@@ -195,7 +246,7 @@ export default function Circle() {
           </div>
           <form onSubmit={send} className="composer">
             <label className="sr-only" htmlFor="circle-message">Message</label>
-            <input id="circle-message" value={text} onChange={(event) => setText(event.target.value)} placeholder="Say something kind or helpful" maxLength={300} />
+            <input id="circle-message" value={text} onChange={(event) => setText(event.target.value)} placeholder="Message the group…" maxLength={300} disabled={sending} />
             <button className="btn" type="submit" disabled={sending}>{sending ? 'Sending…' : 'Send'}</button>
           </form>
         </>
