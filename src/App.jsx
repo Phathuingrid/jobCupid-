@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { allSkills, skillsIn, DEFAULT_DOCS } from './lib/skills'
-import { fetchLive } from './lib/live'
+import { SAMPLE_OPPORTUNITIES } from './data/sample-opportunities'
 import Bridge from './Bridge'
 import Quests from './Quests'
 import Circle from './Circle'
@@ -58,7 +58,7 @@ function closing(iso) {
   return { text: `${days} day${days === 1 ? '' : 's'} left`, closed: false }
 }
 
-const kind = (o) => (o.live ? 'Live · Adzuna' : 'Added by you')
+const kind = (o) => (o.sample ? 'Sample · Example only' : o.live ? 'Live · Adzuna' : 'Added by you')
 const safeLink = (u) => (u && /^https?:\/\//i.test(u) ? u : null)
 const where = (o) => [o.employer, o.place].filter(Boolean).join(' · ')
 const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -80,13 +80,14 @@ function OppCard({ o, r, status, onOpen }) {
       <span style={{ flex: 1 }}>
         <h3>{o.title}</h3>
         <p className="m">{where(o)}</p>
+        {o.sample && <p className="note">Example only — not a current vacancy</p>}
         <p className="m">{r.got} of {r.total} ready{status ? ` · ${status}` : ''}</p>
       </span>
     </button>
   )
 }
 
-function Home({ list, q, setQ, type, setType, pick, skills, getR, apps, open, liveState, onRetry }) {
+function Home({ list, q, setQ, type, setType, pick, skills, getR, apps, open }) {
   return (
     <div className="pad">
       <div className="row">
@@ -113,32 +114,17 @@ function Home({ list, q, setQ, type, setType, pick, skills, getR, apps, open, li
           <div className="mascot"><Mascot size={76} /></div>
         </div>
       )}
-      <h2>{list.length ? 'Fresh today' : liveState === 'loading' ? 'Loading opportunities' : liveState === 'error' ? 'Live listings unavailable' : 'No opportunities found'}</h2>
+      <h2>{list.length ? 'Opportunities to explore' : 'No opportunities found'}</h2>
       {list.length === 0 && (
         <div className="empty">
           <Mascot size={64} />
-          {liveState === 'error' ? (
-            <>
-              <h3>We couldn't load live opportunities</h3>
-              <p className="m">For local listings, configure ADZUNA_APP_ID and ADZUNA_APP_KEY in .env.local and run `npx vercel dev`. For deployment, add them to your hosting environment.</p>
-              <button className="btn" onClick={onRetry}>Try again</button>
-            </>
-          ) : liveState === 'loading' ? (
-            <>
-              <h3>Connecting to live listings…</h3>
-              <p className="m">Please wait while we fetch current opportunities.</p>
-            </>
-          ) : (
-            <>
-              <h3>No live opportunities match</h3>
-              <p className="m">Try a different search, or clear the filter to see all available listings.</p>
-              <button className="btn" onClick={() => { setQ(''); setType('All') }}>Clear search</button>
-            </>
-          )}
+          <h3>No opportunities match</h3>
+          <p className="m">Try a different search, or clear the filter to see all available examples.</p>
+          <button className="btn" onClick={() => { setQ(''); setType('All') }}>Clear search</button>
         </div>
       )}
       {list.map((o) => <OppCard key={o.id} o={o} r={getR(o)} status={apps[o.id]} onOpen={open} />)}
-      {liveState === 'ok' && <p className="note">Jobs by Adzuna. Always check the details on the employer's official page before you apply.</p>}
+      <p className="note">The ten sample entries are practice examples, not verified or current vacancies. Use Add to save a real listing you find from an employer.</p>
     </div>
   )
 }
@@ -165,8 +151,9 @@ function Detail({ o, r, status, setStatus, remove, checks, toggleCheck, onBack, 
           <div className="stat"><p className="m">You earn</p><h3>{o.pay}</h3></div>
         </div>
         <div className="stat"><p className="m">Who can apply</p><h3>{o.eligibility}</h3></div>
-        {o.description && <div className="stat"><p className="m">From the listing</p><p className="m" style={{ color: 'var(--ink)' }}>{o.description.slice(0, 320)}{o.description.length > 320 ? '…' : ''}</p></div>}
+        {o.description && <div className="stat"><p className="m">{o.sample ? 'Example scenario' : 'From the listing'}</p><p className="m" style={{ color: 'var(--ink)' }}>{o.description.slice(0, 320)}{o.description.length > 320 ? '…' : ''}</p></div>}
         {o.live && <p className="note">Source: Adzuna · Checked {new Date(o.checked).toLocaleDateString('en-ZA')}</p>}
+        {o.sample && <p className="note">This is a practice example, not an actual job opening. Confirm details on an employer’s official page before applying.</p>}
         {safeLink(o.link) && <a className="btn" href={safeLink(o.link)} target="_blank" rel="noopener noreferrer">{o.live ? 'Apply on the official page' : 'Open the original page'}</a>}
 
         <div className="card col">
@@ -207,7 +194,7 @@ function Detail({ o, r, status, setStatus, remove, checks, toggleCheck, onBack, 
 
         <div className="row" style={{ alignItems: 'flex-end' }}>
           <Mascot size={52} />
-          <div className="bubble"><p className="m" style={{ color: 'var(--ink)' }}>Check the closing date and requirements on the official page before you apply. We only help you organise what you find.</p></div>
+          <div className="bubble"><p className="m" style={{ color: 'var(--ink)' }}>{o.sample ? 'This is only a practice example. Find and verify a real vacancy before applying.' : 'Check the closing date and requirements on the official page before you apply. We only help you organise what you find.'}</p></div>
         </div>
       </div>
       {!status && <div className="fixed-cta"><button className="btn" style={{ width: '100%' }} onClick={() => setStatus(o.id, 'Saved')}>Save to my list</button></div>}
@@ -316,27 +303,10 @@ export default function App() {
   const [learned, setLearned] = useStored('jc_learned', {})
   const [snap, setSnap] = useStored('jc_snap', {})
   const [custom, setCustom] = useStored('jc_custom', [])
-  const [live, setLive] = useState([])
-  const [liveState, setLiveState] = useState('loading')
   const [msg, setMsg] = useState('')
   const [bridgeId, setBridgeId] = useState(null)
 
-  const loadLive = async () => {
-    setLiveState('loading')
-    try {
-      setLive(await fetchLive())
-      setLiveState('ok')
-    } catch {
-      setLive([])
-      setLiveState('error')
-    }
-  }
-
-  useEffect(() => {
-    loadLive()
-  }, [])
-
-  const feed = [...custom, ...live]
+  const feed = [...custom, ...SAMPLE_OPPORTUNITIES]
   const find = (id) => feed.find((o) => String(o.id) === String(id)) || snap[id]
   const owned = [...new Set([...skills, ...Object.keys(proof)])]
   const getR = (o) => readiness(o, checks, owned)
@@ -419,7 +389,7 @@ export default function App() {
       ) : current ? (
         <Detail o={current} r={getR(current)} status={apps[current.id]} setStatus={setStatus} remove={remove} checks={checks} toggleCheck={toggleCheck} onBack={() => setOpenId(null)} goPath={() => go('path')} onBridge={() => { setBridgeId(current.id); window.scrollTo(0, 0) }} hasSkills={owned.length > 0} />
       ) : tab === 'home' ? (
-        <Home list={list} q={q} setQ={setQ} type={type} setType={setType} pick={pick} skills={owned} getR={getR} apps={apps} open={open} liveState={liveState} onRetry={loadLive} />
+        <Home list={list} q={q} setQ={setQ} type={type} setType={setType} pick={pick} skills={owned} getR={getR} apps={apps} open={open} />
       ) : tab === 'quests' ? (
         <Quests proof={proof} saveProof={saveProof} removeProof={removeProof} learned={learned} setLearned={setLearned} />
       ) : tab === 'circle' ? (
