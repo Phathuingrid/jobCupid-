@@ -83,6 +83,17 @@ a.btn{display:inline-flex;align-items:center;justify-content:center;text-decorat
 .quest-copy .m{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 .circle-safety{background:#fff3d6;border-radius:20px;padding:14px;display:flex;flex-direction:column;gap:6px}
 .circle-account{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.circle-room-list{display:flex;flex-direction:column;gap:12px}
+.circle-room-card{display:flex;align-items:center;gap:12px;width:100%;padding:14px;background:#fff;border:0;border-radius:20px;text-align:left}
+.circle-room-icon{width:48px;height:48px;flex:none;display:grid;place-items:center;border-radius:17px;background:#E8E3FF;color:var(--violet-d);font-weight:900}
+.circle-room-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.circle-room-copy strong{font-size:15px}
+.circle-room-copy .m{font-size:12px}
+.circle-room-arrow{font-size:28px;color:var(--muted)}
+.circle-chat{display:flex;flex-direction:column;gap:12px}
+.circle-chat-header{display:flex;align-items:center;gap:12px;padding:12px;background:#fff;border-radius:20px}
+.circle-chat-header h2{font-size:16px}
+.circle-chat-header .circle-room-icon{flex:none}
 .circle-messages{min-height:180px;max-height:52vh;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding:4px 0}
 .circle-message{max-width:88%;align-self:flex-start;display:flex;flex-direction:column;gap:4px}
 .circle-message.mine{align-self:flex-end}

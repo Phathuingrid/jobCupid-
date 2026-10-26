@@ -26,7 +26,7 @@ Open the local URL it prints. Build for deployment with `npm run build` (output 
 - Opportunity tracking, profile skills, and quest evidence saved in LocalStorage
 - **Cupid Quest:** complete a small practical challenge for a skill and save a link or note as evidence.
 - **Cupid Bridge:** get a per-skill Learn, Build, Demonstrate and Progress plan for a target opportunity.
-- **Cupid Circle:** five shared group chats with email-and-password accounts, nicknames, personal-information warnings and message reporting, powered by Supabase.
+- **Cupid Circle:** a community list that opens five dedicated shared group-chat views, with email-and-password accounts, nicknames, personal-information warnings and message reporting, powered by Supabase.
 
 Quest evidence and learning progress are self-reported and stored in this browser. They count toward readiness, which is a planning aid and not a hiring prediction.
 

@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react'
 import { supabase, supabaseConfigured } from './lib/supabase'
 
 const ROOMS = [
-  ['general', 'Community chat'],
-  ['tech', 'Tech and digital'],
-  ['careers', 'CVs and interviews'],
-  ['opportunities', 'Jobs and learnerships'],
-  ['support', 'Study and support'],
+  ['general', 'Community chat', 'Say hello and connect with the JobCupid community.', '♡'],
+  ['tech', 'Tech and digital', 'Learn about technology, coding and digital careers.', '</>'],
+  ['careers', 'CVs and interviews', 'Share CV tips and practise for interviews.', 'CV'],
+  ['opportunities', 'Jobs and learnerships', 'Discuss opportunities and application advice.', '↗'],
+  ['support', 'Study and support', 'Encourage each other with learning and next steps.', '+'],
 ]
 const PERSONAL = /\b\d{13}\b|(?:\+27|0)[\s-]?\d{2}[\s-]?\d{3}[\s-]?\d{4}|\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b/i
 const NAME_PATTERN = /^[\p{L}\p{N} _.-]{2,24}$/u
@@ -20,7 +20,7 @@ function storedName(userId) {
 }
 
 export default function Circle() {
-  const [room, setRoom] = useState('general')
+  const [room, setRoom] = useState(null)
   const [user, setUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [authMode, setAuthMode] = useState('signin')
@@ -52,6 +52,7 @@ export default function Circle() {
         setNameInput(name)
         setEditingName(!name)
       } else {
+        setRoom(null)
         setDisplayName('')
         setNameInput('')
         setEditingName(false)
@@ -94,7 +95,7 @@ export default function Circle() {
   }, [])
 
   useEffect(() => {
-    if (!supabase || !user) {
+    if (!supabase || !user || !room) {
       setMessages([])
       return undefined
     }
@@ -330,29 +331,55 @@ export default function Circle() {
               <button className="linkbtn" onClick={signOut}>Sign out</button>
             </div>
           </div>
-          <div className="chips" role="group" aria-label="Circle chat rooms">
-            {ROOMS.map(([id, name]) => <button key={id} className={`p chip ${room === id ? 'on' : ''}`} aria-pressed={room === id} onClick={() => { setRoom(id); setNotice('') }}>{name}</button>)}
-          </div>
-          <div className="circle-messages" aria-live="polite">
-            {loading && <p className="note">Loading messages…</p>}
-            {!loading && messages.length === 0 && <p className="note">No messages yet. Start a kind, helpful conversation.</p>}
-            {messages.map((message) => {
-              const mine = message.user_id === user.id
-              return (
-                <article key={message.id} className={`circle-message${mine ? ' mine' : ''}`}>
-                  <p className="note">{mine ? 'You' : message.display_name || 'Community member'} · {new Date(message.created_at).toLocaleString()}</p>
-                  <div className="bubble"><p>{message.text}</p></div>
-                  {!mine && !reported[message.id] && <button className="linkbtn report-button" onClick={() => report(message.id)}>Report message</button>}
-                  {!mine && reported[message.id] && <p className="note" role="status">Reported for review</p>}
-                </article>
-              )
-            })}
-          </div>
-          <form onSubmit={send} className="composer">
-            <label className="sr-only" htmlFor="circle-message">Message</label>
-            <input id="circle-message" value={text} onChange={(event) => setText(event.target.value)} placeholder="Message the group…" maxLength={300} disabled={sending} />
-            <button className="btn" type="submit" disabled={sending}>{sending ? 'Sending…' : 'Send'}</button>
-          </form>
+          {!room ? (
+            <section className="circle-room-list" aria-labelledby="circle-groups-heading">
+              <div>
+                <h2 id="circle-groups-heading">Your communities</h2>
+                <p className="m">Choose a group to join the conversation.</p>
+              </div>
+              {ROOMS.map(([id, name, description, mark]) => (
+                <button key={id} className="circle-room-card" onClick={() => { setRoom(id); setMessages([]); setNotice(''); setError('') }}>
+                  <span className="circle-room-icon" aria-hidden="true">{mark}</span>
+                  <span className="circle-room-copy">
+                    <strong>{name}</strong>
+                    <span className="m">{description}</span>
+                  </span>
+                  <span className="circle-room-arrow" aria-hidden="true">›</span>
+                </button>
+              ))}
+            </section>
+          ) : (
+            <section className="circle-chat" aria-label={`${ROOMS.find(([id]) => id === room)?.[1]} group chat`}>
+              <header className="circle-chat-header">
+                <button className="circle" aria-label="Back to communities" onClick={() => { setRoom(null); setMessages([]); setNotice(''); setError('') }}>←</button>
+                <span className="circle-room-icon" aria-hidden="true">{ROOMS.find(([id]) => id === room)?.[3]}</span>
+                <div>
+                  <h2>{ROOMS.find(([id]) => id === room)?.[1]}</h2>
+                  <p className="note">Community group chat</p>
+                </div>
+              </header>
+              <div className="circle-messages" aria-live="polite">
+                {loading && <p className="note">Loading messages…</p>}
+                {!loading && messages.length === 0 && <p className="note">No messages yet. Start a kind, helpful conversation.</p>}
+                {messages.map((message) => {
+                  const mine = message.user_id === user.id
+                  return (
+                    <article key={message.id} className={`circle-message${mine ? ' mine' : ''}`}>
+                      <p className="note">{mine ? 'You' : message.display_name || 'Community member'} · {new Date(message.created_at).toLocaleString()}</p>
+                      <div className="bubble"><p>{message.text}</p></div>
+                      {!mine && !reported[message.id] && <button className="linkbtn report-button" onClick={() => report(message.id)}>Report message</button>}
+                      {!mine && reported[message.id] && <p className="note" role="status">Reported for review</p>}
+                    </article>
+                  )
+                })}
+              </div>
+              <form onSubmit={send} className="composer">
+                <label className="sr-only" htmlFor="circle-message">Message</label>
+                <input id="circle-message" value={text} onChange={(event) => setText(event.target.value)} placeholder="Message the group…" maxLength={300} disabled={sending} />
+                <button className="btn" type="submit" disabled={sending}>{sending ? 'Sending…' : 'Send'}</button>
+              </form>
+            </section>
+          )}
         </>
       )}
       {error && <p className="err" role="alert">{error}</p>}
