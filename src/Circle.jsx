@@ -11,9 +11,9 @@ const ROOMS = [
 const PERSONAL = /\b\d{13}\b|(?:\+27|0)[\s-]?\d{2}[\s-]?\d{3}[\s-]?\d{4}|\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b/i
 const NAME_PATTERN = /^[\p{L}\p{N} _.-]{2,24}$/u
 
-function storedName() {
+function storedName(userId) {
   try {
-    return localStorage.getItem('jc_circle_name') || ''
+    return localStorage.getItem(`jc_circle_name_${userId}`) || ''
   } catch {
     return ''
   }
@@ -23,9 +23,14 @@ export default function Circle() {
   const [room, setRoom] = useState('general')
   const [user, setUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
-  const [displayName, setDisplayName] = useState(storedName)
-  const [nameInput, setNameInput] = useState(storedName)
-  const [editingName, setEditingName] = useState(!storedName())
+  const [authMode, setAuthMode] = useState('signin')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [signupName, setSignupName] = useState('')
+  const [authBusy, setAuthBusy] = useState(false)
+  const [displayName, setDisplayName] = useState('')
+  const [nameInput, setNameInput] = useState('')
+  const [editingName, setEditingName] = useState(false)
   const [messages, setMessages] = useState([])
   const [reported, setReported] = useState({})
   const [text, setText] = useState('')
@@ -38,9 +43,21 @@ export default function Circle() {
     if (!supabase) return undefined
     let active = true
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user || null)
+      if (!active) return
+      const account = session?.user && !session.user.is_anonymous ? session.user : null
+      setUser(account)
+      if (account) {
+        const name = account.user_metadata?.display_name || storedName(account.id)
+        setDisplayName(name)
+        setNameInput(name)
+        setEditingName(!name)
+      } else {
+        setDisplayName('')
+        setNameInput('')
+        setEditingName(false)
+      }
     })
-    const startAnonymousSession = async () => {
+    const restoreSession = async () => {
       try {
         const { data, error: sessionError } = await supabase.auth.getSession()
         if (!active) return
@@ -49,24 +66,27 @@ export default function Circle() {
           setAuthLoading(false)
           return
         }
-        if (data.session?.user) {
-          setUser(data.session.user)
-          setAuthLoading(false)
-          return
+        const account = data.session?.user
+        if (account?.is_anonymous) {
+          const { error: signOutError } = await supabase.auth.signOut()
+          if (!active) return
+          if (signOutError) setError(`Could not clear the old guest session: ${signOutError.message}`)
+        } else if (account) {
+          setUser(account)
+          const name = account.user_metadata?.display_name || storedName(account.id)
+          setDisplayName(name)
+          setNameInput(name)
+          setEditingName(!name)
         }
-        const { data: anonymousData, error: authError } = await supabase.auth.signInAnonymously()
-        if (!active) return
-        if (authError) setError(`Could not join the chat: ${authError.message}. Enable Anonymous Sign-Ins in Supabase Authentication settings.`)
-        else setUser(anonymousData.user)
         setAuthLoading(false)
       } catch (authError) {
         if (!active) return
         const details = authError instanceof Error ? authError.message : 'Unexpected authentication error'
-        setError(`Could not join the chat: ${details}. Check your connection and Supabase Anonymous Sign-In settings.`)
+        setError(`Could not restore your Circle account: ${details}. Check your connection and Supabase settings.`)
         setAuthLoading(false)
       }
     }
-    startAnonymousSession()
+    restoreSession()
     return () => {
       active = false
       subscription.unsubscribe()
@@ -116,38 +136,113 @@ export default function Circle() {
     }
   }, [room, user])
 
-  const joinWithName = (event) => {
+  const authenticate = async (event) => {
+    event.preventDefault()
+    const address = email.trim()
+    if (!address || !password) {
+      setError('Enter your email address and password.')
+      return
+    }
+    if (authMode === 'signup' && password.length < 8) {
+      setError('Use a password with at least 8 characters.')
+      return
+    }
+    const name = signupName.trim()
+    if (authMode === 'signup' && !NAME_PATTERN.test(name)) {
+      setError('Choose a chat name with 2–24 letters, numbers, spaces, dots, dashes or underscores.')
+      return
+    }
+    setAuthBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      if (authMode === 'signup') {
+        const { data, error: signupError } = await supabase.auth.signUp({
+          email: address,
+          password,
+          options: {
+            data: { display_name: name },
+            emailRedirectTo: window.location.origin,
+          },
+        })
+        if (signupError) {
+          setError(`Could not create your account: ${signupError.message}`)
+        } else if (data.session) {
+          setUser(data.user)
+          setDisplayName(name)
+          setNameInput(name)
+          setEditingName(false)
+          setNotice('Your account is ready. Welcome to Cupid Circle!')
+        } else {
+          setAuthMode('signin')
+          setPassword('')
+          setNotice('Your account was created. Check your email to confirm it, then sign in with your password.')
+        }
+      } else {
+        const { data, error: signinError } = await supabase.auth.signInWithPassword({
+          email: address,
+          password,
+        })
+        if (signinError) {
+          setError(`Could not sign in: ${signinError.message}`)
+        } else {
+          setUser(data.user)
+          const savedName = data.user.user_metadata?.display_name || storedName(data.user.id)
+          setDisplayName(savedName)
+          setNameInput(savedName)
+          setEditingName(!savedName)
+          setPassword('')
+        }
+      }
+    } catch (authError) {
+      const details = authError instanceof Error ? authError.message : 'Unexpected authentication error'
+      setError(`Circle sign-in failed: ${details}`)
+    } finally {
+      setAuthBusy(false)
+    }
+  }
+
+  const saveDisplayName = async (event) => {
     event.preventDefault()
     const name = nameInput.trim()
     if (!NAME_PATTERN.test(name)) {
       setError('Choose a chat name with 2–24 letters, numbers, spaces, dots, dashes or underscores.')
       return
     }
-    try {
-      localStorage.setItem('jc_circle_name', name)
-    } catch {
-      setError('Your chat name could not be saved in this browser. Check your browser storage settings and try again.')
-      return
-    }
-    setDisplayName(name)
-    setEditingName(false)
+    if (!supabase || !user) return
+    setAuthBusy(true)
     setError('')
-    setNotice('')
+    try {
+      const { data, error: updateError } = await supabase.auth.updateUser({ data: { display_name: name } })
+      if (updateError) {
+        setError(`Could not save your chat name: ${updateError.message}`)
+        return
+      }
+      try {
+        localStorage.setItem(`jc_circle_name_${user.id}`, name)
+      } catch {
+        setError('Your chat name was saved to your account but could not be cached in this browser.')
+      }
+      setUser(data.user)
+      setDisplayName(name)
+      setEditingName(false)
+    } catch (updateError) {
+      const details = updateError instanceof Error ? updateError.message : 'Unexpected account update error'
+      setError(`Could not save your chat name: ${details}`)
+    } finally {
+      setAuthBusy(false)
+    }
   }
 
-  const retryJoin = async () => {
+  const signOut = async () => {
     if (!supabase) return
-    setAuthLoading(true)
     setError('')
     try {
-      const { data, error: authError } = await supabase.auth.signInAnonymously()
-      if (authError) setError(`Could not join the chat: ${authError.message}. Enable Anonymous Sign-Ins in Supabase Authentication settings.`)
-      else setUser(data.user)
-    } catch (authError) {
-      const details = authError instanceof Error ? authError.message : 'Unexpected authentication error'
-      setError(`Could not join the chat: ${details}. Check your connection and Supabase settings.`)
-    } finally {
-      setAuthLoading(false)
+      const { error: signoutError } = await supabase.auth.signOut()
+      if (signoutError) setError(`Could not sign out: ${signoutError.message}`)
+    } catch (signoutError) {
+      const details = signoutError instanceof Error ? signoutError.message : 'Unexpected sign-out error'
+      setError(`Could not sign out: ${details}`)
     }
   }
 
@@ -197,34 +292,43 @@ export default function Circle() {
       <div className="row"><div className="circle-mark" aria-hidden="true">♡</div><div><p className="brand">Cupid Circle</p><h1>Community group chats</h1></div></div>
       <div className="circle-safety">
         <h3>Keep each other safe</h3>
-        <p className="m">Chat without an email address. Messages are shared with everyone in each group. Never share your ID number, phone, address, passwords, or bank details. Be kind and report unsafe messages.</p>
+        <p className="m">Sign in with your email and password to join the shared groups. Never share your ID number, phone, address, passwords, or bank details. Be kind and report unsafe messages.</p>
       </div>
 
       {!supabaseConfigured ? (
         <div className="empty">
           <h2>Circle needs backend setup</h2>
-          <p className="m">Add VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY to .env.local, enable Anonymous Sign-Ins in Supabase Authentication settings, run the SQL setup in supabase/circle.sql, then restart the development server.</p>
+          <p className="m">For the deployed site, add VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in Vercel → Project Settings → Environment Variables for Production, then redeploy. For local testing, add them to .env.local and restart the dev server. In Supabase, enable Email sign-in.</p>
         </div>
       ) : authLoading ? (
-        <p className="note" role="status">Joining the community chat…</p>
+        <p className="note" role="status">Checking your Circle account…</p>
       ) : !user ? (
-        <div className="empty">
-          <h2>Could not join the chat</h2>
-          <p className="m">Check the Supabase settings and make sure Anonymous Sign-Ins are enabled.</p>
-          <button className="btn" onClick={retryJoin}>Try again</button>
-        </div>
+        <form className="card col" onSubmit={authenticate}>
+          <h2>{authMode === 'signup' ? 'Create your Circle account' : 'Sign in to Cupid Circle'}</h2>
+          <p className="m">{authMode === 'signup' ? 'Create an account with your email, a password, and a chat name.' : 'Use your email and password to join the community groups.'}</p>
+          {authMode === 'signup' && <label className="field">Chat name<input value={signupName} onChange={(event) => setSignupName(event.target.value)} maxLength={24} autoComplete="nickname" required /></label>}
+          <label className="field">Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required /></label>
+          <label className="field">Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={authMode === 'signup' ? 8 : undefined} autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'} required /></label>
+          <button className="btn" type="submit" disabled={authBusy}>{authBusy ? 'Please wait…' : authMode === 'signup' ? 'Create account' : 'Sign in'}</button>
+          <button className="linkbtn" type="button" disabled={authBusy} onClick={() => { setAuthMode(authMode === 'signup' ? 'signin' : 'signup'); setError(''); setNotice('') }}>
+            {authMode === 'signup' ? 'Already have an account? Sign in' : 'New to Cupid Circle? Create an account'}
+          </button>
+        </form>
       ) : editingName || !displayName ? (
-        <form className="card col" onSubmit={joinWithName}>
+        <form className="card col" onSubmit={saveDisplayName}>
           <h2>Choose your chat name</h2>
-          <p className="m">No email or public profile is needed. Pick a nickname between 2 and 24 characters. It will appear beside your messages.</p>
+          <p className="m">Pick a nickname between 2 and 24 characters. It will appear beside your messages.</p>
           <label className="field">Chat name<input value={nameInput} onChange={(event) => setNameInput(event.target.value)} maxLength={24} autoComplete="nickname" required /></label>
-          <button className="btn" type="submit">Join the groups</button>
+          <button className="btn" type="submit" disabled={authBusy}>{authBusy ? 'Saving…' : 'Save chat name'}</button>
         </form>
       ) : (
         <>
           <div className="circle-account">
             <p className="note">Chatting as <strong>{displayName}</strong></p>
-            <button className="linkbtn" onClick={() => { setNameInput(displayName); setEditingName(true) }}>Change name</button>
+            <div className="seg">
+              <button className="linkbtn" onClick={() => { setNameInput(displayName); setEditingName(true) }}>Change name</button>
+              <button className="linkbtn" onClick={signOut}>Sign out</button>
+            </div>
           </div>
           <div className="chips" role="group" aria-label="Circle chat rooms">
             {ROOMS.map(([id, name]) => <button key={id} className={`p chip ${room === id ? 'on' : ''}`} aria-pressed={room === id} onClick={() => { setRoom(id); setNotice('') }}>{name}</button>)}

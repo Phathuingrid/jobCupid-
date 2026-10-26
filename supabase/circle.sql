@@ -50,17 +50,24 @@ alter table public.circle_reports enable row level security;
 
 drop policy if exists "Signed-in members can read Circle messages" on public.circle_messages;
 create policy "Signed-in members can read Circle messages"
-  on public.circle_messages for select to authenticated using (true);
+  on public.circle_messages for select to authenticated
+  using ((select auth.jwt() ->> 'is_anonymous') is distinct from 'true');
 
 drop policy if exists "Members can post as themselves" on public.circle_messages;
 create policy "Members can post as themselves"
   on public.circle_messages for insert to authenticated
-  with check (user_id = (select auth.uid()));
+  with check (
+    user_id = (select auth.uid())
+    and (select auth.jwt() ->> 'is_anonymous') is distinct from 'true'
+  );
 
 drop policy if exists "Members can report messages" on public.circle_reports;
 create policy "Members can report messages"
   on public.circle_reports for insert to authenticated
-  with check (reporter_id = (select auth.uid()));
+  with check (
+    reporter_id = (select auth.uid())
+    and (select auth.jwt() ->> 'is_anonymous') is distinct from 'true'
+  );
 
 revoke all on public.circle_messages from anon, authenticated;
 grant select, insert on public.circle_messages to authenticated;
